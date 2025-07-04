@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 import argparse
 import csv
+import operator
 import os
+import re
 import sys
-from typing import List, Dict
+from typing import List, Dict, Callable, Any, Tuple
 
 from rich.console import Console
 from rich.table import Table
@@ -13,12 +15,6 @@ from rich.style import Style
 class DataLoader(ABC):
     @abstractmethod
     def load(self, source: str) -> List[Dict[str, str]]:
-        pass
-
-
-class DataViewer(ABC):
-    @abstractmethod
-    def show(self, data: List[Dict[str, str]], source_name: str):
         pass
 
 
@@ -42,6 +38,73 @@ class CSVDataLoader(DataLoader):
                 f'{e}', file=sys.stderr
             )
             sys.exit(1)
+
+
+class DataProcessor(ABC):
+    @abstractmethod
+    def process(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        pass
+
+
+
+class WhereProcessor(DataProcessor):
+
+    OPERATORS: Dict[str, Callable[[Any, Any], bool]] = {
+        '=': operator.eq,
+        '>': operator.gt,
+        '<': operator.lt,
+    }
+
+    def __init__(self, key: str, op_str: str, value: str):
+        self.key = key
+        if op_str not in self.OPERATORS:
+            raise ValueError(f'Unsupported operator: {op_str}. Use one of {List(self.OPERATORS.keys())}')
+        self.op = self.OPERATORS[op_str]
+        self.value_str = value
+        self.is_numeric_comparison = self._is_float(value)
+
+    @staticmethod
+    def _is_float(val: str) -> bool:
+        try:
+            float(val)
+            return True
+        except (ValueError, TypeError):
+            return False
+        
+    def process(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        if not data:
+            return []
+        
+        if self.key not in data[0]:
+            print(f'Warning: key {self.key}, not found in columns', file=sys.stderr)
+            return data
+        
+        filtered_data = []
+        for row in data:
+            row_value_str = row.get(self.key)
+            if row_value_str is None:
+                continue
+
+
+            if self.is_numeric_comparison:
+                try:
+                        row_value_float = float(row_value_str)
+                        condition_value_float = float(self.value_str)
+                        if self.op(row_value_float, condition_value_float):
+                            filtered_data.append(row)
+                except (ValueError, TypeError):
+                    continue
+            
+            else:
+                if self.op(row_value_str, self.value_str):
+                    filtered_data.append(row)
+        return filtered_data
+
+
+class DataViewer(ABC):
+    @abstractmethod
+    def show(self, data: List[Dict[str, str]], source_name: str):
+        pass
 
 
 class ConsoleViewer(DataViewer):
@@ -87,12 +150,12 @@ class ConsoleViewer(DataViewer):
 
     def show(self, data: List[Dict[str, str]], source_name: str):
         console = Console()
+
         if not data:
             console.print('Nothing to display', style=self.STYLE_TEXT_RED)
             return
         
         table_title = self._generate_title_from_filename(source_name)
-
         table = Table(
             title=table_title,
             show_header=True,
@@ -103,10 +166,9 @@ class ConsoleViewer(DataViewer):
 
         headers = list(data[0].keys())
         column_types = self._determine_column_types(data, headers)
-        for header in headers:
-            cell_value = column_types.get(header, '')
-            is_numeric = self._is_float_or_int(cell_value)
 
+        for header in headers:
+            is_numeric = column_types.get(header, False)
             table.add_column(
                 header,
                 justify='right' if is_numeric else 'left',
@@ -123,9 +185,11 @@ class ConsoleViewer(DataViewer):
 
 
 class CSVApplication:
-    def __init__(self, loader: DataLoader, viewer: DataViewer):
+
+    def __init__(self, loader: DataLoader, viewer: DataViewer, processors: List[DataProcessor]):
         self.loader = loader
         self.viewer = viewer
+        self.processors = processors
         self.data: List[Dict[str, str]] = []
 
 
@@ -134,9 +198,29 @@ class CSVApplication:
         console.print(f'Loading data from: {source_file} ...\n')
         self.data = self.loader.load(source_file)
 
-        self.viewer.show(self.data, source_name=source_file)
-        if self.data:
-            console.print(f'\nSuccessfully displayed {len(self.data)} records')
+        processed_data = self.data
+        if self.processors:
+            console.print('Processing data')
+        for processor in self.processors:
+            processed_data = processor.process(processed_data)
+
+        self.viewer.show(processed_data, source_name=source_file)
+
+        if processed_data:
+            console.print(f'\nSuccessfully displayed {len(processed_data)} records')
+        elif self.data:
+            console.print(f'\nNothing to display')
+
+
+def parse_where_clause(clause: str) -> Tuple[str, str, str]:
+    match = re.match(r'^([^=<>]+)([=<>])(.*)$', clause)
+    if not match:
+        raise ValueError(
+            f'Invalid --where clause format: {clause}'
+            'Expected format: "key=value" , "key<value" or "key>value"'
+        )
+    key, op, value = match.groups()
+    return key.strip(), op.strip(), value.strip()
 
 
 def main():
@@ -149,12 +233,30 @@ def main():
         required=True,
         help='Path to the file to be loaded'
     )
+    parser.add_argument(
+        '--where',
+        type=str,
+        help='Filter with condition like "rating>4.0"'
+    )
+
+
     args = parser.parse_args()
 
     csv_loader = CSVDataLoader()
     console_viewer = ConsoleViewer()
+    processors: List[DataProcessor] = []
 
-    app = CSVApplication(loader=csv_loader, viewer=console_viewer)
+    if args.where:
+        try:
+            key, op, value = parse_where_clause(args.where)
+            where_processor = WhereProcessor(key, op, value)
+            processors.append(where_processor)
+        except ValueError as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
+
+
+    app = CSVApplication(loader=csv_loader, viewer=console_viewer, processors=processors)
     app.run(source_file=args.file)
 
 
