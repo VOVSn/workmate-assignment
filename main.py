@@ -1,8 +1,8 @@
+from abc import ABC, abstractmethod
 import argparse
 import csv
-import sys
 import os
-from abc import ABC, abstractmethod
+import sys
 from typing import List, Dict, Any
 
 from rich.console import Console
@@ -13,8 +13,17 @@ from rich.style import Style
 def generate_title_from_filename(filename: str) -> str:
     base_name = os.path.basename(filename)
     title, _ = os.path.splitext(base_name)
-    title = title.replace('_', ' ').title()
-    return title
+    return title.replace('_', ' ').title()
+
+
+def is_float_or_int(value: str) -> bool:
+    if not value:
+        return False
+    try:
+        float(value)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 class DataLoader(ABC):
@@ -45,36 +54,43 @@ class CSVDataLoader(DataLoader):
 
 class ConsoleViewer(DataViewer):
 
+    STYLE_TEXT = Style(color='cyan')
+    STYLE_NUMERIC = Style(color='bright_green')
+    STYLE_HEADER = 'bold yellow'
+    STYLE_BORDER = 'bright_black'
+    STYLE_TITLE = 'bold default'
+
     def show(self, data: List[Dict[str, Any]], source_name: str):
         if not data:
-            print('Nothing to display')
+            print('Nothing to display', style='yellow')
             return
         
         console = Console()
-
-        text_style = Style(color='cyan')
-        numeric_style = Style(color='green')
-
         table_title = generate_title_from_filename(source_name)
 
         table = Table(
             title=table_title,
             show_header=True,
-            header_style='bold magenta',
-            border_style='dim',
+            header_style=self.STYLE_HEADER,
+            border_style=self.STYLE_BORDER,
+            title_style=self.STYLE_TITLE,
         )
 
         headers = data[0].keys()
+        first_row = data[0]
 
         for header in headers:
-            is_numeric = data[0][header].isnumeric() if data and data[0].get(header) else False
+            cell_value = first_row.get(header, '')
+            is_numeric = is_float_or_int(cell_value)
 
             table.add_column(
                 header,
                 justify='right' if is_numeric else 'left',
-                style=numeric_style if is_numeric else text_style,
+                style=self.STYLE_NUMERIC if is_numeric else self.STYLE_TEXT,
                 no_wrap=False,
             )
+
+
         for row in data:
             table.add_row(*row.values())
 
