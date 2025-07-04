@@ -3,7 +3,7 @@ import argparse
 import csv
 import os
 import sys
-from typing import List, Dict, Any
+from typing import List, Dict
 
 from rich.console import Console
 from rich.table import Table
@@ -69,9 +69,23 @@ class ConsoleViewer(DataViewer):
             return True
         except (ValueError, TypeError):
             return False
+        
+
+    def _determine_column_types(
+            self, data: List[Dict[str, str]], headers: List[str]
+        ) -> Dict[str, bool]:
+        column_is_numeric = {}
+        for header in headers:
+            column_is_numeric[header] = False
+            for row in data:
+                value = row.get(header, '')
+                if value:
+                    column_is_numeric[header] = self._is_float_or_int(value)
+                    break
+        return column_is_numeric
 
 
-    def show(self, data: List[Dict[str, Any]], source_name: str):
+    def show(self, data: List[Dict[str, str]], source_name: str):
         console = Console()
         if not data:
             console.print('Nothing to display', style=self.STYLE_TEXT_RED)
@@ -87,11 +101,10 @@ class ConsoleViewer(DataViewer):
             title_style=self.STYLE_TITLE,
         )
 
-        headers = data[0].keys()
-        first_row = data[0]
-
+        headers = list(data[0].keys())
+        column_types = self._determine_column_types(data, headers)
         for header in headers:
-            cell_value = first_row.get(header, '')
+            cell_value = column_types.get(header, '')
             is_numeric = self._is_float_or_int(cell_value)
 
             table.add_column(
@@ -102,7 +115,9 @@ class ConsoleViewer(DataViewer):
             )
 
         for row in data:
-            table.add_row(*row.values())
+            str_row_values = [
+                str(val) if val is not None else '' for val in row.values()]
+            table.add_row(*str_row_values)
 
         console.print(table)
 
