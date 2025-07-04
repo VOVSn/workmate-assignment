@@ -28,27 +28,32 @@ def is_float_or_int(value: str) -> bool:
 
 class DataLoader(ABC):
     @abstractmethod
-    def load(self, source: str) -> List[Dict[str, Any]]:
+    def load(self, source: str) -> List[Dict[str, str]]:
         pass
 
 
 class DataViewer(ABC):
     @abstractmethod
-    def show(self, data: List[Dict[str, Any]], source_name: str):
+    def show(self, data: List[Dict[str, str]], source_name: str):
         pass
 
 
 class CSVDataLoader(DataLoader):
-    def load(self, filename: str) -> List[Dict[str, Any]]:
+    def load(self, filename: str) -> List[Dict[str, str]]:
         try:
             with open(filename, mode='r', newline='', encoding='utf-8') as file:
+                if not file.read(1):
+                    return[]
+                file.seek(0)
                 reader = csv.DictReader(file)
+                if not reader.fieldnames:
+                    return []
                 return list(reader)
         except FileNotFoundError:
             print(f'Error: file {filename} was not found', file=sys.stderr)
             sys.exit(1)
         except Exception as e:
-            print(f'Error occurred reading file or wrong format ({filename})')
+            print(f'Error occurred reading file or wrong format ({filename}): {e}', file=sys.stderr)
             sys.exit(1)
 
 
@@ -90,7 +95,6 @@ class ConsoleViewer(DataViewer):
                 no_wrap=False,
             )
 
-
         for row in data:
             table.add_row(*row.values())
 
@@ -101,14 +105,18 @@ class CSVApplication:
     def __init__(self, loader: DataLoader, viewer: DataViewer):
         self.loader = loader
         self.viewer = viewer
-        self.data: List[Dict[str, Any]] = []
+        self.data: List[Dict[str, str]] = []
+
 
     def run(self, source_file: str):
-        print(f'Loading data from: {source_file}')
+        console = Console()
+        console.print(f'Loading data from: {source_file} ...\n')
         self.data = self.loader.load(source_file)
 
         self.viewer.show(self.data, source_name=source_file)
-        print(f'Successfully displayed {len(self.data)} records')
+        if self.data:
+            console.print(f'\nSuccessfully displayed {len(self.data)} records')
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -127,6 +135,7 @@ def main():
 
     app = CSVApplication(loader=csv_loader, viewer=console_viewer)
     app.run(source_file=args.file)
+
 
 if __name__ == "__main__":
     main()
