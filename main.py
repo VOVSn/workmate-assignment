@@ -10,22 +10,6 @@ from rich.table import Table
 from rich.style import Style
 
 
-def generate_title_from_filename(filename: str) -> str:
-    base_name = os.path.basename(filename)
-    title, _ = os.path.splitext(base_name)
-    return title.replace('_', ' ').title()
-
-
-def is_float_or_int(value: str) -> bool:
-    if not value:
-        return False
-    try:
-        float(value)
-        return True
-    except (ValueError, TypeError):
-        return False
-
-
 class DataLoader(ABC):
     @abstractmethod
     def load(self, source: str) -> List[Dict[str, str]]:
@@ -53,25 +37,47 @@ class CSVDataLoader(DataLoader):
             print(f'Error: file {filename} was not found', file=sys.stderr)
             sys.exit(1)
         except Exception as e:
-            print(f'Error occurred reading file or wrong format ({filename}): {e}', file=sys.stderr)
+            print(
+                f'Error occurred reading file or wrong format ({filename}):'
+                f'{e}', file=sys.stderr
+            )
             sys.exit(1)
 
 
 class ConsoleViewer(DataViewer):
 
     STYLE_TEXT = Style(color='cyan')
+    STYLE_TEXT_RED = Style(color='red')
     STYLE_NUMERIC = Style(color='bright_green')
     STYLE_HEADER = 'bold yellow'
     STYLE_BORDER = 'bright_black'
     STYLE_TITLE = 'bold default'
 
+    @staticmethod
+    def _generate_title_from_filename(filename: str) -> str:
+        base_name = os.path.basename(filename)
+        title, _ = os.path.splitext(base_name)
+        return title.replace('_', ' ').title()
+
+
+    @staticmethod
+    def _is_float_or_int(value: str) -> bool:
+        if not value:
+            return False
+        try:
+            float(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+
     def show(self, data: List[Dict[str, Any]], source_name: str):
+        console = Console()
         if not data:
-            print('Nothing to display', style='yellow')
+            console.print('Nothing to display', style=self.STYLE_TEXT_RED)
             return
         
-        console = Console()
-        table_title = generate_title_from_filename(source_name)
+        table_title = self._generate_title_from_filename(source_name)
 
         table = Table(
             title=table_title,
@@ -86,7 +92,7 @@ class ConsoleViewer(DataViewer):
 
         for header in headers:
             cell_value = first_row.get(header, '')
-            is_numeric = is_float_or_int(cell_value)
+            is_numeric = self._is_float_or_int(cell_value)
 
             table.add_column(
                 header,
