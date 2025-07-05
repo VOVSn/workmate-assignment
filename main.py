@@ -5,21 +5,24 @@ import operator
 import os
 import re
 import sys
-from typing import List, Dict, Callable, Any, Tuple
+from typing import Any, Callable, Dict, List, Tuple, TypeAlias
 
 from rich.console import Console
 from rich.table import Table
 from rich.style import Style
 
 
+CSVData: TypeAlias = List[Dict[str, str]]
+
+
 class DataLoader(ABC):
     @abstractmethod
-    def load(self, source: str) -> List[Dict[str, str]]:
+    def load(self, source: str) -> CSVData:
         pass
 
 
 class CSVDataLoader(DataLoader):
-    def load(self, filename: str) -> List[Dict[str, str]]:
+    def load(self, filename: str) -> CSVData:
         try:
             with open(filename, mode='r', newline='', encoding='utf-8') as file:
                 if not file.read(1):
@@ -42,7 +45,7 @@ class CSVDataLoader(DataLoader):
 
 class DataProcessor(ABC):
     @abstractmethod
-    def process(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def process(self, data: CSVData) -> CSVData:
         pass
 
 
@@ -71,13 +74,13 @@ class WhereProcessor(DataProcessor):
         except (ValueError, TypeError):
             return False
         
-    def process(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def process(self, data: CSVData) -> CSVData:
         if not data:
             return []
         
         if self.key not in data[0]:
             print(f'Warning: key {self.key}, not found in columns', file=sys.stderr)
-            return data
+            return []
         
         filtered_data = []
         for row in data:
@@ -103,7 +106,7 @@ class WhereProcessor(DataProcessor):
 
 class DataViewer(ABC):
     @abstractmethod
-    def show(self, data: List[Dict[str, str]], source_name: str):
+    def show(self, data: CSVData, source_name: str):
         pass
 
 
@@ -135,7 +138,7 @@ class ConsoleViewer(DataViewer):
         
 
     def _determine_column_types(
-            self, data: List[Dict[str, str]], headers: List[str]
+            self, data: CSVData, headers: List[str]
         ) -> Dict[str, bool]:
         column_is_numeric = {}
         for header in headers:
@@ -148,7 +151,7 @@ class ConsoleViewer(DataViewer):
         return column_is_numeric
 
 
-    def show(self, data: List[Dict[str, str]], source_name: str):
+    def show(self, data: CSVData, source_name: str):
         console = Console()
 
         if not data:
@@ -190,7 +193,7 @@ class CSVApplication:
         self.loader = loader
         self.viewer = viewer
         self.processors = processors
-        self.data: List[Dict[str, str]] = []
+        self.data: CSVData = []
 
 
     def run(self, source_file: str):
