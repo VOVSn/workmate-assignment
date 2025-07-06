@@ -107,3 +107,35 @@ def test_aggregate_processor_min(sample_csv_data):
     processor = AggregateProcessor(key="price", agg_func_str='min')
     result = processor.process(sample_csv_data)
     assert result == [{'min': '149.0'}]
+
+
+def test_main_integration(monkeypatch, capsys, sample_csv_text):
+    argv = [
+        'main.py',
+        '--file', 'anyfile.csv',
+        '--where', 'price<500',
+        '--order-by', 'rating=desc',
+    ]
+    monkeypatch.setattr('sys.argv', argv)
+    mock_open = patch('builtins.open', return_value=io.StringIO(sample_csv_text))
+    with mock_open:
+        main()
+    stdout = capsys.readouterr().out
+    assert 'poco x5 pro' in stdout
+    assert 'iphone se' in stdout
+    assert stdout.find('poco x5 pro') < stdout.find('iphone se')
+    assert 'iphone 15 pro' not in stdout
+
+
+def test_main_aggregate_integration(monkeypatch, capsys, sample_csv_text):
+    argv = [
+        'main.py',
+        '--file', 'anyfile.csv',
+        '--aggregate', 'price=avg'
+    ]
+    monkeypatch.setattr('sys.argv', argv)
+    with patch('builtins.open', return_value=io.StringIO(sample_csv_text)):
+        main()
+    stdout = capsys.readouterr().out
+    assert '602.00' in stdout
+    assert 'avg' in stdout
