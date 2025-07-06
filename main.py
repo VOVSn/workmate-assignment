@@ -20,6 +20,17 @@ from rich.table import Table
 CSVData: TypeAlias = List[Dict[str, str]]
 
 
+def is_numeric(value: Any) -> bool:
+    """Checks if a value can be converted to a float"""
+    if value is None:
+        return False
+    try:
+        float(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 class DataLoader(ABC):
     """Abstract base class for data loading"""
     @abstractmethod
@@ -96,17 +107,6 @@ class ConsoleViewer(DataViewer):
     STYLE_BORDER = 'bright_black'
     STYLE_TITLE = 'bold default'
 
-    @staticmethod
-    def _is_float_or_int(value: str) -> bool:
-        """Checks if string can be converted to float"""
-        if not value:
-            return False
-        try:
-            float(value)
-            return True
-        except (ValueError, TypeError):
-            return False
-        
     def _determine_column_types(
             self, data: CSVData, headers: List[str]
         ) -> Dict[str, bool]:
@@ -117,7 +117,7 @@ class ConsoleViewer(DataViewer):
             for row in data:
                 value = row.get(header, '')
                 if value:
-                    column_is_numeric[header] = self._is_float_or_int(value)
+                    column_is_numeric[header] = is_numeric(value)
                     break
         return column_is_numeric
 
@@ -168,17 +168,8 @@ class WhereProcessor(DataProcessor):
             )
         self.op = self.OPERATORS[op_str]
         self.value_str = value
-        self.is_numeric_comparison = self._is_float(value)
+        self.is_numeric_comparison = is_numeric(value)
 
-    @staticmethod
-    def _is_float(val: str) -> bool:
-        """Checks if string can be converted to float"""
-        try:
-            float(val)
-            return True
-        except (ValueError, TypeError):
-            return False
-        
     def process(self, data: CSVData) -> CSVData:
         """Filters the data based on the condition"""
         if not data:
@@ -212,15 +203,6 @@ class OrderByProcessor(DataProcessor):
         """Initializes order processor"""
         self.key = key
         self.reverse = reverse
-
-    @staticmethod
-    def _is_float(val: str) -> bool:
-        """checks if a string can be converted to float"""
-        try:
-            float(val) 
-            return True
-        except (ValueError, TypeError): 
-            return False
         
     def process(self, data: CSVData) -> CSVData:
         """Sorts the data on the key and direction"""
@@ -228,12 +210,12 @@ class OrderByProcessor(DataProcessor):
             if data and self.key not in data[0]:
                 print(f'Warning: key {self.key} not found', file=sys.stderr)
             return data
-        is_numeric = any(self._is_float(row.get(self.key,'')) for row in data)
+        is_col_numeric = any(is_numeric(row.get(self.key,'')) for row in data)
 
         def sort_key(row: Dict[str, str]):
             """Defines the value to use for sorting each row"""
             val = row.get(self.key)
-            if is_numeric:
+            if is_col_numeric:
                 try:
                     return float(val)
                 except (ValueError, TypeError):
