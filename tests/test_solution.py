@@ -57,3 +57,53 @@ def test_csv_data_loader_empty_file():
     with patch('builtins.open', return_value=io.StringIO('')):
         data = loader.load('anyfile.csv')
         assert data == []
+
+
+def test_where_processor_numeric(sample_csv_data):
+    processor = WhereProcessor(key='rating', op_str='>', value='4.7')
+    result = processor.process(sample_csv_data)
+    assert len(result) == 2
+    names = {row['name'] for row in result}
+    assert names == {'iphone 15 pro', 'galaxy s23 ultra'}
+
+
+def test_where_processor_string(sample_csv_data):
+    processor = WhereProcessor(key='brand', op_str='=', value='apple')
+    result = processor.process(sample_csv_data)
+    assert len(result) == 4
+    assert all(row['brand'] == 'apple' for row in result)
+
+
+def test_order_by_processor_numeric_desc(sample_csv_data):
+    processor = OrderByProcessor(key='price', reverse=True)
+    result = processor.process(sample_csv_data)
+    assert result[0]['name'] == 'galaxy s23 ultra'
+    assert result[1]['name'] == 'iphone 15 pro'
+    assert result[-1]['name'] == 'redmi 10c'
+
+
+def test_order_by_processor_string_asc(sample_csv_data):
+    processor = OrderByProcessor(key='name', reverse=False)
+    result = processor.process(sample_csv_data)
+    assert result[0]['name'] == 'galaxy a54'
+    assert result[1]['name'] == 'galaxy s23 ultra'
+    assert result[-1]['name'] == 'redmi note 12'
+
+
+def test_aggregate_processor_avg(sample_csv_data):
+    processor = AggregateProcessor(key="rating", agg_func_str='avg')
+    result = processor.process(sample_csv_data)
+    assert len(result) == 1
+    assert float(result[0]['avg']) == pytest.approx(4.49)
+
+
+def test_aggregate_processor_max(sample_csv_data):
+    processor = AggregateProcessor(key="price", agg_func_str='max')
+    result = processor.process(sample_csv_data)
+    assert result == [{'max': '1199.0'}]
+
+
+def test_aggregate_processor_min(sample_csv_data):
+    processor = AggregateProcessor(key="price", agg_func_str='min')
+    result = processor.process(sample_csv_data)
+    assert result == [{'min': '149.0'}]
