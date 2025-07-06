@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 import argparse
 import csv
 import operator
-import os
 import re
 import statistics
 import sys
