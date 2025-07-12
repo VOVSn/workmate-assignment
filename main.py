@@ -247,7 +247,7 @@ class AggregateProcessor(DataProcessor):
                     f'Warning: key {self.key} for aggregation not found',
                     file=sys.stderr
                 )
-                return []
+            return []
         numeric_values = []
         for row in data:
             try:
